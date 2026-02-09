@@ -211,7 +211,7 @@ describe("subagent announce formatting", () => {
       "agent:main:main": {
         sessionId: "session-thread",
         lastChannel: "telegram",
-        lastTo: "telegram:123",
+        lastTo: "telegram:-100123",
         lastThreadId: 42,
         queueMode: "collect",
         queueDebounceMs: 0,
@@ -237,7 +237,7 @@ describe("subagent announce formatting", () => {
 
     const call = agentSpy.mock.calls[0]?.[0] as { params?: Record<string, unknown> };
     expect(call?.params?.channel).toBe("telegram");
-    expect(call?.params?.to).toBe("telegram:123");
+    expect(call?.params?.to).toBe("telegram:-100123");
     expect(call?.params?.threadId).toBe("42");
   });
 
@@ -249,7 +249,7 @@ describe("subagent announce formatting", () => {
       "agent:main:main": {
         sessionId: "session-thread-override",
         lastChannel: "telegram",
-        lastTo: "telegram:123",
+        lastTo: "telegram:-100123",
         lastThreadId: 42,
         queueMode: "collect",
         queueDebounceMs: 0,
@@ -263,7 +263,7 @@ describe("subagent announce formatting", () => {
       requesterDisplayKey: "main",
       requesterOrigin: {
         channel: "telegram",
-        to: "telegram:123",
+        to: "telegram:-100123",
         threadId: 99,
       },
       task: "do thing",

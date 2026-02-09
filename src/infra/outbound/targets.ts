@@ -99,7 +99,14 @@ export function resolveSessionDeliveryTarget(params: {
   }
 
   const accountId = channel && channel === lastChannel ? lastAccountId : undefined;
-  const threadId = channel && channel === lastChannel ? lastThreadId : undefined;
+  // Telegram DM thread IDs (positive chat ID) are internal reply-chain IDs
+  // that cannot be used in outgoing sendMessage calls — skip them.
+  // lastTo format: "telegram:119111425" (DM), "telegram:-100123456" (group),
+  // or "telegram:@username" (could be either). Only numeric positive IDs are DMs.
+  const telegramTarget =
+    channel === "telegram" && lastTo ? String(lastTo).replace(/^telegram:/i, "") : "";
+  const isTelegramDm = channel === "telegram" && /^\d+$/.test(telegramTarget);
+  const threadId = channel && channel === lastChannel && !isTelegramDm ? lastThreadId : undefined;
   const mode = params.mode ?? (explicitTo ? "explicit" : "implicit");
 
   return {

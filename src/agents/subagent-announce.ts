@@ -114,8 +114,17 @@ function resolveAnnounceOrigin(
 
 async function sendAnnounce(item: AnnounceQueueItem) {
   const origin = item.origin;
+  // Do not forward threadId for Telegram private chats — DM thread IDs
+  // are internal reply-chain IDs that cannot be used in sendMessage.
+  // origin.to format: "telegram:119111425" (DM) or "telegram:-100123456" (group).
+  // Only numeric positive Telegram IDs are DMs. @usernames and negative IDs are groups.
+  const isTelegram = origin?.channel === "telegram" || /^telegram:/i.test(String(origin?.to ?? ""));
+  const telegramId = isTelegram && origin?.to ? String(origin.to).replace(/^telegram:/i, "") : "";
+  const isPrivateChat = isTelegram && /^\d+$/.test(telegramId);
   const threadId =
-    origin?.threadId != null && origin.threadId !== "" ? String(origin.threadId) : undefined;
+    !isPrivateChat && origin?.threadId != null && origin.threadId !== ""
+      ? String(origin.threadId)
+      : undefined;
   await callGateway({
     method: "agent",
     params: {

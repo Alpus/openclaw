@@ -30,6 +30,7 @@ import {
 
 const PARSE_ERR_RE = /can't parse entities|parse entities|find end of the entity/i;
 const VOICE_FORBIDDEN_RE = /VOICE_MESSAGES_FORBIDDEN/;
+const THREAD_NOT_FOUND_RE = /message thread not found/i;
 
 export async function deliverReplies(params: {
   replies: ReplyPayload[];
@@ -531,6 +532,25 @@ async function sendTelegramText(
     return res.message_id;
   } catch (err) {
     const errText = formatErrorMessage(err);
+    // Retry without message_thread_id if thread not found (DM thread IDs are not addressable).
+    if (THREAD_NOT_FOUND_RE.test(errText) && baseParams.message_thread_id != null) {
+      runtime.log?.(
+        `telegram sendMessage failed with message_thread_id, retrying without thread: ${errText}`,
+      );
+      const { message_thread_id: _, ...paramsNoThread } = baseParams;
+      const res = await withTelegramApiErrorLogging({
+        operation: "sendMessage-threadless",
+        runtime,
+        fn: () =>
+          bot.api.sendMessage(chatId, htmlText, {
+            parse_mode: "HTML",
+            ...(linkPreviewOptions ? { link_preview_options: linkPreviewOptions } : {}),
+            ...(opts?.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
+            ...paramsNoThread,
+          }),
+      });
+      return res.message_id;
+    }
     if (PARSE_ERR_RE.test(errText)) {
       runtime.log?.(`telegram HTML parse failed; retrying without formatting: ${errText}`);
       const fallbackText = opts?.plainText ?? text;

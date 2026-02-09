@@ -63,6 +63,11 @@ export function buildTelegramThreadParams(thread?: TelegramThreadSpec | null) {
   if (!thread?.id) {
     return undefined;
   }
+  // DM thread IDs are internal Telegram reply-chain IDs — they cannot be used
+  // in outgoing sendMessage calls. Only forum thread IDs are addressable.
+  if (thread.scope === "dm") {
+    return undefined;
+  }
   const normalized = Math.trunc(thread.id);
   if (normalized === TELEGRAM_GENERAL_TOPIC_ID && thread.scope === "forum") {
     return undefined;
