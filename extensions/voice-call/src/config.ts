@@ -219,6 +219,8 @@ export const VoiceCallStreamingConfigSchema = z
     vadThreshold: z.number().min(0).max(1).default(0.5),
     /** WebSocket path for media stream connections */
     streamPath: z.string().min(1).default("/voice/stream"),
+    /** Enable streaming TTS pipeline (sentence-level pipelining with ulaw_8000) */
+    ttsStreaming: z.boolean().default(false),
   })
   .strict()
   .default({
@@ -228,6 +230,7 @@ export const VoiceCallStreamingConfigSchema = z
     silenceDurationMs: 800,
     vadThreshold: 0.5,
     streamPath: "/voice/stream",
+    ttsStreaming: false,
   });
 export type VoiceCallStreamingConfig = z.infer<typeof VoiceCallStreamingConfigSchema>;
 

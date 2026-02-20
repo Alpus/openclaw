@@ -26,7 +26,7 @@ type InitiateContext = Pick<
 
 type SpeakContext = Pick<
   CallManagerContext,
-  "activeCalls" | "providerCallIdMap" | "provider" | "config" | "storePath"
+  "activeCalls" | "providerCallIdMap" | "provider" | "config" | "storePath" | "onTranscriptEntry"
 >;
 
 type ConversationContext = Pick<
@@ -49,6 +49,7 @@ type EndCallContext = Pick<
   | "storePath"
   | "transcriptWaiters"
   | "maxDurationTimers"
+  | "onCallEnded"
 >;
 
 export async function initiateCall(
@@ -163,7 +164,8 @@ export async function speak(
     transitionState(call, "speaking");
     persistCallRecord(ctx.storePath, call);
 
-    addTranscriptEntry(call, "bot", text);
+    const entry = addTranscriptEntry(call, "bot", text);
+    ctx.onTranscriptEntry?.(call, entry);
 
     const voice = ctx.provider?.name === "twilio" ? ctx.config.tts?.openai?.voice : undefined;
     await ctx.provider.playTts({
@@ -327,6 +329,7 @@ export async function endCall(
 
     clearMaxDurationTimer(ctx, callId);
     rejectTranscriptWaiter(ctx, callId, "Call ended: hangup-bot");
+    ctx.onCallEnded?.(call);
 
     ctx.activeCalls.delete(callId);
     if (call.providerCallId) {

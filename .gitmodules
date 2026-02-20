@@ -1,0 +1,3 @@
+[submodule "extensions/camofox-browser"]
+	path = extensions/camofox-browser
+	url = https://github.com/Alpus/camofox-browser

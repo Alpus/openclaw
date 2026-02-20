@@ -18,7 +18,7 @@ export interface RealtimeSTTConfig {
   apiKey: string;
   /** Model to use (default: gpt-4o-transcribe) */
   model?: string;
-  /** Silence duration in ms before considering speech ended (default: 800) */
+  /** Silence duration in ms before considering speech ended (default: 500) */
   silenceDurationMs?: number;
   /** VAD threshold 0-1 (default: 0.5) */
   vadThreshold?: number;
@@ -62,7 +62,7 @@ export class OpenAIRealtimeSTTProvider {
     }
     this.apiKey = config.apiKey;
     this.model = config.model || "gpt-4o-transcribe";
-    this.silenceDurationMs = config.silenceDurationMs || 800;
+    this.silenceDurationMs = config.silenceDurationMs || 500;
     this.vadThreshold = config.vadThreshold || 0.5;
   }
 
@@ -131,6 +131,7 @@ class OpenAIRealtimeSTTSession implements RealtimeSTTSession {
             input_audio_format: "g711_ulaw",
             input_audio_transcription: {
               model: this.model,
+              language: "ru",
             },
             turn_detection: {
               type: "server_vad",
