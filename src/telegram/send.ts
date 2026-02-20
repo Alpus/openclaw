@@ -1178,3 +1178,211 @@ export async function createForumTopicTelegram(
     chatId: normalizedChatId,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Forum topic editing (rename / change icon)
+// ---------------------------------------------------------------------------
+
+type TelegramEditForumTopicOpts = {
+  token?: string;
+  accountId?: string;
+  api?: Bot["api"];
+  verbose?: boolean;
+  retry?: RetryConfig;
+  /** New topic name (0-128 chars). Empty/omitted keeps current name. */
+  name?: string;
+  /** New custom emoji ID for topic icon. Empty string removes the icon. */
+  iconCustomEmojiId?: string;
+};
+
+export async function editForumTopicTelegram(
+  chatId: string,
+  messageThreadId: number,
+  opts: TelegramEditForumTopicOpts = {},
+): Promise<{ ok: true; chatId: string; topicId: number }> {
+  const cfg = loadConfig();
+  const account = resolveTelegramAccount({ cfg, accountId: opts.accountId });
+  const token = resolveToken(opts.token, account);
+  const target = parseTelegramTarget(chatId);
+  const normalizedChatId = normalizeChatId(target.chatId);
+  const client = resolveTelegramClientOptions(account);
+  const api = opts.api ?? new Bot(token, client ? { client } : undefined).api;
+
+  const request = createTelegramRetryRunner({
+    retry: opts.retry,
+    configRetry: account.config.retry,
+    verbose: opts.verbose,
+    shouldRetry: (err) => isRecoverableTelegramNetworkError(err, { context: "send" }),
+  });
+  const logHttpError = createTelegramHttpLogger(cfg);
+  const requestWithDiag = <T>(fn: () => Promise<T>, label?: string) =>
+    withTelegramApiErrorLogging({
+      operation: label ?? "request",
+      fn: () => request(fn, label),
+    }).catch((err) => {
+      logHttpError(label ?? "request", err);
+      throw err;
+    });
+
+  const extra: Record<string, unknown> = {};
+  if (opts.name != null) {
+    extra.name = opts.name;
+  }
+  if (opts.iconCustomEmojiId != null) {
+    extra.icon_custom_emoji_id = opts.iconCustomEmojiId;
+  }
+
+  await requestWithDiag(
+    () => api.editForumTopic(normalizedChatId, messageThreadId, extra),
+    "editForumTopic",
+  );
+
+  recordChannelActivity({
+    channel: "telegram",
+    accountId: account.accountId,
+    direction: "outbound",
+  });
+  return { ok: true, chatId: normalizedChatId, topicId: messageThreadId };
+}
+
+// ---------------------------------------------------------------------------
+// Forum topic close / reopen
+// ---------------------------------------------------------------------------
+
+type TelegramForumTopicToggleOpts = {
+  token?: string;
+  accountId?: string;
+  api?: Bot["api"];
+  verbose?: boolean;
+  retry?: RetryConfig;
+};
+
+export async function closeForumTopicTelegram(
+  chatId: string,
+  messageThreadId: number,
+  opts: TelegramForumTopicToggleOpts = {},
+): Promise<{ ok: true; chatId: string; topicId: number }> {
+  const cfg = loadConfig();
+  const account = resolveTelegramAccount({ cfg, accountId: opts.accountId });
+  const token = resolveToken(opts.token, account);
+  const target = parseTelegramTarget(chatId);
+  const normalizedChatId = normalizeChatId(target.chatId);
+  const client = resolveTelegramClientOptions(account);
+  const api = opts.api ?? new Bot(token, client ? { client } : undefined).api;
+
+  const request = createTelegramRetryRunner({
+    retry: opts.retry,
+    configRetry: account.config.retry,
+    verbose: opts.verbose,
+    shouldRetry: (err) => isRecoverableTelegramNetworkError(err, { context: "send" }),
+  });
+  const logHttpError = createTelegramHttpLogger(cfg);
+  const requestWithDiag = <T>(fn: () => Promise<T>, label?: string) =>
+    withTelegramApiErrorLogging({
+      operation: label ?? "request",
+      fn: () => request(fn, label),
+    }).catch((err) => {
+      logHttpError(label ?? "request", err);
+      throw err;
+    });
+
+  await requestWithDiag(
+    () => api.closeForumTopic(normalizedChatId, messageThreadId),
+    "closeForumTopic",
+  );
+
+  recordChannelActivity({
+    channel: "telegram",
+    accountId: account.accountId,
+    direction: "outbound",
+  });
+  return { ok: true, chatId: normalizedChatId, topicId: messageThreadId };
+}
+
+export async function reopenForumTopicTelegram(
+  chatId: string,
+  messageThreadId: number,
+  opts: TelegramForumTopicToggleOpts = {},
+): Promise<{ ok: true; chatId: string; topicId: number }> {
+  const cfg = loadConfig();
+  const account = resolveTelegramAccount({ cfg, accountId: opts.accountId });
+  const token = resolveToken(opts.token, account);
+  const target = parseTelegramTarget(chatId);
+  const normalizedChatId = normalizeChatId(target.chatId);
+  const client = resolveTelegramClientOptions(account);
+  const api = opts.api ?? new Bot(token, client ? { client } : undefined).api;
+
+  const request = createTelegramRetryRunner({
+    retry: opts.retry,
+    configRetry: account.config.retry,
+    verbose: opts.verbose,
+    shouldRetry: (err) => isRecoverableTelegramNetworkError(err, { context: "send" }),
+  });
+  const logHttpError = createTelegramHttpLogger(cfg);
+  const requestWithDiag = <T>(fn: () => Promise<T>, label?: string) =>
+    withTelegramApiErrorLogging({
+      operation: label ?? "request",
+      fn: () => request(fn, label),
+    }).catch((err) => {
+      logHttpError(label ?? "request", err);
+      throw err;
+    });
+
+  await requestWithDiag(
+    () => api.reopenForumTopic(normalizedChatId, messageThreadId),
+    "reopenForumTopic",
+  );
+
+  recordChannelActivity({
+    channel: "telegram",
+    accountId: account.accountId,
+    direction: "outbound",
+  });
+  return { ok: true, chatId: normalizedChatId, topicId: messageThreadId };
+}
+
+// ---------------------------------------------------------------------------
+// Forum topic deletion
+// ---------------------------------------------------------------------------
+
+export async function deleteForumTopicTelegram(
+  chatId: string,
+  messageThreadId: number,
+  opts: TelegramForumTopicToggleOpts = {},
+): Promise<{ ok: true; chatId: string; topicId: number }> {
+  const cfg = loadConfig();
+  const account = resolveTelegramAccount({ cfg, accountId: opts.accountId });
+  const token = resolveToken(opts.token, account);
+  const target = parseTelegramTarget(chatId);
+  const normalizedChatId = normalizeChatId(target.chatId);
+  const client = resolveTelegramClientOptions(account);
+  const api = opts.api ?? new Bot(token, client ? { client } : undefined).api;
+
+  const request = createTelegramRetryRunner({
+    retry: opts.retry,
+    configRetry: account.config.retry,
+    verbose: opts.verbose,
+    shouldRetry: (err) => isRecoverableTelegramNetworkError(err, { context: "send" }),
+  });
+  const logHttpError = createTelegramHttpLogger(cfg);
+  const requestWithDiag = <T>(fn: () => Promise<T>, label?: string) =>
+    withTelegramApiErrorLogging({
+      operation: label ?? "request",
+      fn: () => request(fn, label),
+    }).catch((err) => {
+      logHttpError(label ?? "request", err);
+      throw err;
+    });
+
+  await requestWithDiag(
+    () => api.deleteForumTopic(normalizedChatId, messageThreadId),
+    "deleteForumTopic",
+  );
+
+  recordChannelActivity({
+    channel: "telegram",
+    accountId: account.accountId,
+    direction: "outbound",
+  });
+  return { ok: true, chatId: normalizedChatId, topicId: messageThreadId };
+}

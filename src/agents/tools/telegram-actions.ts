@@ -8,10 +8,14 @@ import {
 } from "../../telegram/inline-buttons.js";
 import { resolveTelegramReactionLevel } from "../../telegram/reaction-level.js";
 import {
+  closeForumTopicTelegram,
   createForumTopicTelegram,
+  deleteForumTopicTelegram,
   deleteMessageTelegram,
+  editForumTopicTelegram,
   editMessageTelegram,
   reactMessageTelegram,
+  reopenForumTopicTelegram,
   sendMessageTelegram,
   sendStickerTelegram,
 } from "../../telegram/send.js";
@@ -368,6 +372,70 @@ export async function handleTelegramAction(
       name: result.name,
       chatId: result.chatId,
     });
+  }
+
+  if (action === "editForumTopic") {
+    if (!isActionEnabled("editForumTopic")) {
+      throw new Error("Telegram editForumTopic is disabled.");
+    }
+    const chatId = readStringOrNumberParam(params, "chatId", { required: true });
+    const messageThreadId = readNumberParam(params, "messageThreadId", {
+      required: true,
+      integer: true,
+    });
+    const name = readStringParam(params, "name");
+    const iconCustomEmojiId = readStringParam(params, "iconCustomEmojiId");
+    const result = await editForumTopicTelegram(chatId ?? "", messageThreadId!, {
+      accountId: accountId ?? undefined,
+      name: name ?? undefined,
+      iconCustomEmojiId: iconCustomEmojiId ?? undefined,
+    });
+    return jsonResult(result);
+  }
+
+  if (action === "closeForumTopic") {
+    if (!isActionEnabled("closeForumTopic")) {
+      throw new Error("Telegram closeForumTopic is disabled.");
+    }
+    const chatId = readStringOrNumberParam(params, "chatId", { required: true });
+    const messageThreadId = readNumberParam(params, "messageThreadId", {
+      required: true,
+      integer: true,
+    });
+    const result = await closeForumTopicTelegram(chatId ?? "", messageThreadId!, {
+      accountId: accountId ?? undefined,
+    });
+    return jsonResult(result);
+  }
+
+  if (action === "reopenForumTopic") {
+    if (!isActionEnabled("closeForumTopic")) {
+      throw new Error("Telegram closeForumTopic (reopen) is disabled.");
+    }
+    const chatId = readStringOrNumberParam(params, "chatId", { required: true });
+    const messageThreadId = readNumberParam(params, "messageThreadId", {
+      required: true,
+      integer: true,
+    });
+    const result = await reopenForumTopicTelegram(chatId ?? "", messageThreadId!, {
+      accountId: accountId ?? undefined,
+    });
+    return jsonResult(result);
+  }
+
+  if (action === "deleteForumTopic") {
+    if (!isActionEnabled("deleteForumTopic")) {
+      throw new Error("Telegram deleteForumTopic is disabled.");
+    }
+    const chatId = readStringOrNumberParam(params, "chatId", { required: true });
+    const messageThreadId = readNumberParam(params, "messageThreadId", {
+      required: true,
+      integer: true,
+    });
+    const result = await deleteForumTopicTelegram(chatId ?? "", messageThreadId!, {
+      accountId: accountId ?? undefined,
+    });
+    return jsonResult(result);
   }
 
   throw new Error(`Unsupported Telegram action: ${action}`);
