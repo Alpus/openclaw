@@ -14,6 +14,7 @@ import { MediaStreamHandler } from "./media-stream.js";
 import type { VoiceCallProvider } from "./providers/base.js";
 import { OpenAIRealtimeSTTProvider } from "./providers/stt-openai-realtime.js";
 import type { TwilioProvider } from "./providers/twilio.js";
+import type { StreamingTtsPipeline } from "./streaming-tts.js";
 import type { NormalizedEvent, WebhookContext } from "./types.js";
 
 const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
@@ -32,6 +33,12 @@ export class VoiceCallWebhookServer {
 
   /** Media stream handler for bidirectional audio (when streaming enabled) */
   private mediaStreamHandler: MediaStreamHandler | null = null;
+
+  /** Active streaming TTS pipelines per providerCallId (for barge-in cancellation) */
+  private activePipelines = new Map<string, StreamingTtsPipeline>();
+
+  /** Active AbortControllers per providerCallId (for cancelling LLM on barge-in) */
+  private activeAbortControllers = new Map<string, AbortController>();
 
   constructor(
     config: VoiceCallConfig,
@@ -122,7 +129,11 @@ export class VoiceCallWebhookServer {
         const callMode = call.metadata?.mode as string | undefined;
         const shouldRespond = call.direction === "inbound" || callMode === "conversation";
         if (shouldRespond) {
-          this.handleInboundResponse(call.callId, transcript).catch((err) => {
+          const useStreaming = this.config.streaming?.ttsStreaming === true;
+          const handler = useStreaming
+            ? this.handleFinalTranscriptStreaming(call.callId, providerCallId, transcript)
+            : this.handleInboundResponse(call.callId, transcript);
+          handler.catch((err) => {
             console.warn(`[voice-call] Failed to auto-respond:`, err);
           });
         }
@@ -130,6 +141,15 @@ export class VoiceCallWebhookServer {
       onSpeechStart: (providerCallId) => {
         if (this.provider.name === "twilio") {
           (this.provider as TwilioProvider).clearTtsQueue(providerCallId);
+        }
+        // Abort active LLM request on barge-in
+        const ac = this.activeAbortControllers.get(providerCallId);
+        if (ac) ac.abort();
+        // Abort streaming TTS pipeline on barge-in
+        const pipeline = this.activePipelines.get(providerCallId);
+        if (pipeline) {
+          pipeline.abort();
+          this.activePipelines.delete(providerCallId);
         }
       },
       onPartialTranscript: (callId, partial) => {
@@ -165,6 +185,12 @@ export class VoiceCallWebhookServer {
         }
         if (this.provider.name === "twilio") {
           (this.provider as TwilioProvider).unregisterCallStream(callId);
+        }
+        // Cleanup streaming TTS pipeline
+        const pipeline = this.activePipelines.get(callId);
+        if (pipeline) {
+          pipeline.abort();
+          this.activePipelines.delete(callId);
         }
       },
     };
@@ -363,6 +389,91 @@ export class VoiceCallWebhookServer {
     timeoutMs = 30_000,
   ): Promise<string> {
     return readRequestBodyWithLimit(req, { maxBytes, timeoutMs });
+  }
+
+  /**
+   * Handle final transcript using streaming TTS pipeline.
+   * Streams LLM response through sentence-level TTS pipelining for lower latency.
+   */
+  private async handleFinalTranscriptStreaming(
+    callId: string,
+    providerCallId: string,
+    finalTranscript: string,
+  ): Promise<void> {
+    const call = this.manager.getCall(callId);
+    if (!call || !this.coreConfig) return;
+
+    // Need stream SID for streaming TTS
+    let streamSid: string | undefined;
+    if (this.provider.name === "twilio") {
+      const session = this.mediaStreamHandler?.getSessionByCallId(providerCallId);
+      streamSid = session?.streamSid;
+    }
+
+    if (!streamSid || !this.mediaStreamHandler) {
+      console.log("[voice-call] No media stream for streaming TTS, falling back to batch");
+      return this.handleInboundResponse(callId, finalTranscript);
+    }
+
+    // Extract ElevenLabs config
+    const ttsConfig = this.config.tts;
+    const elConfig = (ttsConfig as Record<string, unknown> | undefined)?.elevenlabs as
+      | Record<string, string>
+      | undefined;
+    const elApiKey = elConfig?.apiKey || process.env.ELEVENLABS_API_KEY || "";
+    const elVoiceId = elConfig?.voiceId || "cgSgspJ2msm6clMCkdW9";
+    const elModelId = elConfig?.modelId || "eleven_flash_v2_5";
+
+    if (!elApiKey) {
+      console.log("[voice-call] No ElevenLabs API key for streaming TTS, falling back to batch");
+      return this.handleInboundResponse(callId, finalTranscript);
+    }
+
+    const t0 = Date.now();
+    console.log(`[voice-call] ⏱ TRACE streaming-tts-start`);
+
+    const { StreamingTtsPipeline } = await import("./streaming-tts.js");
+
+    const pipeline = new StreamingTtsPipeline({
+      voiceId: elVoiceId,
+      modelId: elModelId,
+      apiKey: elApiKey,
+      streamSid,
+      mediaStreamHandler: this.mediaStreamHandler,
+    });
+
+    this.activePipelines.set(providerCallId, pipeline);
+
+    // AbortController for cancelling LLM on barge-in
+    const abortController = new AbortController();
+    this.activeAbortControllers.set(providerCallId, abortController);
+
+    try {
+      const { generateVoiceResponse } = await import("./response-generator.js");
+
+      let previousText = "";
+      await generateVoiceResponse({
+        voiceConfig: this.config,
+        coreConfig: this.coreConfig!,
+        callId,
+        from: call.from,
+        transcript: call.transcript,
+        userMessage: finalTranscript,
+        signal: abortController.signal,
+        onPartialReply: ({ text }) => {
+          const delta = text.slice(previousText.length);
+          previousText = text;
+          if (delta) pipeline.feedTokens(delta);
+        },
+      });
+
+      pipeline.flush();
+      await pipeline.waitForCompletion();
+      console.log(`[voice-call] ⏱ TRACE streaming-tts-done: +${Date.now() - t0}ms`);
+    } finally {
+      this.activePipelines.delete(providerCallId);
+      this.activeAbortControllers.delete(providerCallId);
+    }
   }
 
   /**

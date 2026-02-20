@@ -341,6 +341,9 @@
           },
           "streamPath": {
             "type": "string"
+          },
+          "ttsStreaming": {
+            "type": "boolean"
           }
         }
       },

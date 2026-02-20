@@ -25,6 +25,9 @@ type EventContext = Pick<
   | "transcriptWaiters"
   | "maxDurationTimers"
   | "onCallAnswered"
+  | "onCallStartTranscript"
+  | "onTranscriptEntry"
+  | "onCallEnded"
 >;
 
 function shouldAcceptInbound(config: EventContext["config"], from: string | undefined): boolean {
@@ -180,6 +183,7 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
         },
       });
       ctx.onCallAnswered?.(call);
+      ctx.onCallStartTranscript?.(call);
       break;
 
     case "call.active":
@@ -192,7 +196,8 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
 
     case "call.speech":
       if (event.isFinal) {
-        addTranscriptEntry(call, "user", event.transcript);
+        const entry = addTranscriptEntry(call, "user", event.transcript);
+        ctx.onTranscriptEntry?.(call, entry);
         resolveTranscriptWaiter(ctx, call.callId, event.transcript);
       }
       transitionState(call, "listening");
@@ -204,6 +209,7 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
       transitionState(call, event.reason as CallState);
       clearMaxDurationTimer(ctx, call.callId);
       rejectTranscriptWaiter(ctx, call.callId, `Call ended: ${event.reason}`);
+      ctx.onCallEnded?.(call);
       ctx.activeCalls.delete(call.callId);
       if (call.providerCallId) {
         ctx.providerCallIdMap.delete(call.providerCallId);
@@ -217,6 +223,7 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
         transitionState(call, "error");
         clearMaxDurationTimer(ctx, call.callId);
         rejectTranscriptWaiter(ctx, call.callId, `Call error: ${event.error}`);
+        ctx.onCallEnded?.(call);
         ctx.activeCalls.delete(call.callId);
         if (call.providerCallId) {
           ctx.providerCallIdMap.delete(call.providerCallId);

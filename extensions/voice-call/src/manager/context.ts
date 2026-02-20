@@ -1,6 +1,6 @@
 import type { VoiceCallConfig } from "../config.js";
 import type { VoiceCallProvider } from "../providers/base.js";
-import type { CallId, CallRecord } from "../types.js";
+import type { CallId, CallRecord, TranscriptEntry } from "../types.js";
 
 export type TranscriptWaiter = {
   resolve: (text: string) => void;
@@ -32,6 +32,12 @@ export type CallManagerTransientState = {
 export type CallManagerHooks = {
   /** Optional runtime hook invoked after an event transitions a call into answered state. */
   onCallAnswered?: (call: CallRecord) => void;
+  /** Optional hook invoked when a call is answered (for transcript file creation). */
+  onCallStartTranscript?: (call: CallRecord) => void;
+  /** Optional hook invoked when a transcript entry is added to a call. */
+  onTranscriptEntry?: (call: CallRecord, entry: TranscriptEntry) => void;
+  /** Optional hook invoked when a call ends (for transcript finalization). */
+  onCallEnded?: (call: CallRecord) => void;
 };
 
 export type CallManagerContext = CallManagerRuntimeState &

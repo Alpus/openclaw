@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { VoiceCallConfig } from "./config.js";
@@ -14,6 +15,14 @@ import {
 } from "./manager/outbound.js";
 import { getCallHistoryFromStore, loadActiveCallsFromStore } from "./manager/store.js";
 import type { VoiceCallProvider } from "./providers/base.js";
+import type { VoiceCallProvider } from "./providers/base.js";
+import type {
+  CallId,
+  CallRecord,
+  NormalizedEvent,
+  OutboundCallOptions,
+  TranscriptEntry,
+} from "./types.js";
 import type { CallId, CallRecord, NormalizedEvent, OutboundCallOptions } from "./types.js";
 import { resolveUserPath } from "./utils.js";
 
@@ -57,6 +66,9 @@ export class CallManager {
     }
   >();
   private maxDurationTimers = new Map<CallId, NodeJS.Timeout>();
+
+  /** Map callId → file path for the live transcript markdown */
+  private liveTranscriptPaths = new Map<string, string>();
 
   constructor(config: VoiceCallConfig, storePath?: string) {
     this.config = config;
@@ -144,6 +156,15 @@ export class CallManager {
       onCallAnswered: (call) => {
         this.maybeSpeakInitialMessageOnAnswered(call);
       },
+      onCallStartTranscript: (call) => {
+        this.startTranscriptFile(call);
+      },
+      onTranscriptEntry: (call, entry) => {
+        this.appendTranscriptLine(call, entry);
+      },
+      onCallEnded: (call) => {
+        this.finalizeTranscriptFile(call);
+      },
     };
   }
 
@@ -205,5 +226,94 @@ export class CallManager {
    */
   async getCallHistory(limit = 50): Promise<CallRecord[]> {
     return getCallHistoryFromStore(this.storePath, limit);
+  }
+
+  // --- Real-time transcript file ---
+
+  private static pad2(n: number): string {
+    return String(n).padStart(2, "0");
+  }
+
+  /**
+   * Create the transcript markdown file when a call starts.
+   */
+  private startTranscriptFile(call: CallRecord): void {
+    const workspaceDir = path.join(os.homedir(), ".openclaw", "workspace");
+    const callsDir = path.join(workspaceDir, "memory", "calls");
+
+    const d = new Date(call.startedAt);
+    const p = CallManager.pad2;
+    const dateStr = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    const timeStr = `${p(d.getHours())}-${p(d.getMinutes())}`;
+    const filePath = path.join(callsDir, `${dateStr}-${timeStr}.md`);
+    this.liveTranscriptPaths.set(call.callId, filePath);
+
+    const header = [
+      `# Voice Call — ${dateStr} ${timeStr.replace("-", ":")}`,
+      "",
+      `- **Direction:** ${call.direction}`,
+      `- **From:** ${call.from}`,
+      `- **To:** ${call.to}`,
+      `- **Status:** 🔴 In progress`,
+      "",
+      "## Transcript",
+      "",
+    ].join("\n");
+
+    fsp
+      .mkdir(callsDir, { recursive: true })
+      .then(() => fsp.writeFile(filePath, header, "utf-8"))
+      .then(() =>
+        console.log(`[voice-call] Live transcript started: memory/calls/${dateStr}-${timeStr}.md`),
+      )
+      .catch((err) => console.error("[voice-call] Failed to start transcript file:", err));
+  }
+
+  /**
+   * Append a single transcript entry to the live file.
+   */
+  private appendTranscriptLine(call: CallRecord, entry: TranscriptEntry): void {
+    const filePath = this.liveTranscriptPaths.get(call.callId);
+    if (!filePath) return;
+
+    const ts = new Date(entry.timestamp);
+    const p = CallManager.pad2;
+    const time = `${p(ts.getHours())}:${p(ts.getMinutes())}:${p(ts.getSeconds())}`;
+    const speaker = entry.speaker === "bot" ? "🤖 Bot" : "👤 User";
+    const line = `**${time}** ${speaker}: ${entry.text}\n\n`;
+
+    fsp.appendFile(filePath, line).catch((err) => {
+      console.error("[voice-call] Failed to append transcript line:", err);
+    });
+  }
+
+  /**
+   * Finalize the transcript file when a call ends — update status & add duration.
+   */
+  private finalizeTranscriptFile(call: CallRecord): void {
+    const filePath = this.liveTranscriptPaths.get(call.callId);
+    if (!filePath) return;
+
+    const durationMs = (call.endedAt || Date.now()) - call.startedAt;
+    const durationMin = Math.round(durationMs / 60000);
+
+    const footer = [
+      "---",
+      "",
+      `- **Duration:** ~${durationMin} min`,
+      `- **End reason:** ${call.endReason || "unknown"}`,
+      "",
+    ].join("\n");
+
+    fsp
+      .appendFile(filePath, footer)
+      .then(() => fsp.readFile(filePath, "utf-8"))
+      .then((content) => {
+        const updated = content.replace("🔴 In progress", "✅ Completed");
+        return fsp.writeFile(filePath, updated, "utf-8");
+      })
+      .then(() => console.log(`[voice-call] Transcript finalized: ${filePath}`))
+      .catch((err) => console.error("[voice-call] Failed to finalize transcript:", err))
+      .finally(() => this.liveTranscriptPaths.delete(call.callId));
   }
 }

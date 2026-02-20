@@ -37,7 +37,11 @@ export function transitionState(call: CallRecord, newState: CallState): void {
   }
 }
 
-export function addTranscriptEntry(call: CallRecord, speaker: "bot" | "user", text: string): void {
+export function addTranscriptEntry(
+  call: CallRecord,
+  speaker: "bot" | "user",
+  text: string,
+): TranscriptEntry {
   const entry: TranscriptEntry = {
     timestamp: Date.now(),
     speaker,
@@ -45,4 +49,5 @@ export function addTranscriptEntry(call: CallRecord, speaker: "bot" | "user", te
     isFinal: true,
   };
   call.transcript.push(entry);
+  return entry;
 }
