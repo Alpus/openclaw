@@ -315,11 +315,33 @@ export async function resolveMedia(
   const msg = ctx.message;
   const downloadAndSaveTelegramFile = async (filePath: string, fetchImpl: typeof fetch) => {
     const url = `https://api.telegram.org/file/bot${token}/${filePath}`;
-    const fetched = await fetchRemoteMedia({
-      url,
-      fetchImpl,
-      filePathHint: filePath,
-    });
+    // Retry fetch up to 3 times with exponential backoff for transient network errors.
+    const MAX_RETRIES = 3;
+    const BASE_DELAY_MS = 500;
+    let fetched: Awaited<ReturnType<typeof fetchRemoteMedia>> | undefined;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        fetched = await fetchRemoteMedia({
+          url,
+          fetchImpl,
+          filePathHint: filePath,
+        });
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < MAX_RETRIES - 1) {
+          const delay = BASE_DELAY_MS * 2 ** attempt;
+          logVerbose(
+            `telegram: media fetch attempt ${attempt + 1}/${MAX_RETRIES} failed, retrying in ${delay}ms: ${String(err)}`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+    if (!fetched) {
+      throw lastErr ?? new Error("Media fetch failed after retries");
+    }
     const originalName = fetched.fileName ?? filePath;
     return saveMediaBuffer(fetched.buffer, fetched.contentType, "inbound", maxBytes, originalName);
   };
