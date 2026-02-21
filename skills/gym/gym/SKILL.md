@@ -87,6 +87,7 @@ When all exercises done (or user says "всё"), execute AUTOMATICALLY:
    - Deviations from plan + why
    - Notes: observations, next session adjustments
    - "Всё сохранено ✅"
+4. **Workout Card** — `python3 ~/.openclaw/workspace/creativity/projects/workout-card/workout-card.py --output ~/.openclaw/media/` → send JPG as shareable session card
 
 ### Exercise Changes — Temporary or Permanent?
 
