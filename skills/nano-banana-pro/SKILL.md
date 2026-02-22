@@ -50,9 +50,23 @@ API key
 - `GEMINI_API_KEY` env var
 - Or set `skills."nano-banana-pro".apiKey` / `skills."nano-banana-pro".env.GEMINI_API_KEY` in `~/.openclaw/openclaw.json`
 
+Background / batch generation (no auto-send)
+
+```bash
+uv run {baseDir}/scripts/generate_image.py --prompt "description" --filename "output.png" --quiet
+```
+
+`--quiet` (`-q`) suppresses the `MEDIA:` line so OpenClaw does **not** auto-send the image to chat. Use this when:
+
+- Pre-generating multiple images (e.g. gym illustrations) — send later with captions via `message send` + `media`
+- The caller wants to control when and how the image is delivered
+
+Without `--quiet` (default), the script prints `MEDIA: /path` and OpenClaw auto-attaches the file immediately.
+
 Notes
 
 - Resolutions: `1K` (default), `2K`, `4K`.
 - Use timestamps in filenames: `yyyy-mm-dd-hh-mm-ss-name.png`.
-- The script prints a `MEDIA:` line for OpenClaw to auto-attach on supported chat providers.
+- **Default behaviour:** prints a `MEDIA:` line → OpenClaw auto-attaches on supported providers.
+- **`--quiet` mode:** no `MEDIA:` line → image saved silently, agent sends manually with caption.
 - Do not read the image back; report the saved path only.

@@ -60,6 +60,12 @@ def main():
         "--api-key", "-k",
         help="Gemini API key (overrides GEMINI_API_KEY env var)"
     )
+    parser.add_argument(
+        "--quiet", "-q",
+        action="store_true",
+        help="Suppress MEDIA: output line. Use for background/batch generation "
+             "when the caller will send the image later with its own caption."
+    )
 
     args = parser.parse_args()
 
@@ -169,8 +175,9 @@ def main():
         if image_saved:
             full_path = output_path.resolve()
             print(f"\nImage saved: {full_path}")
-            # OpenClaw parses MEDIA tokens and will attach the file on supported providers.
-            print(f"MEDIA: {full_path}")
+            if not args.quiet:
+                # OpenClaw parses MEDIA tokens and will attach the file on supported providers.
+                print(f"MEDIA: {full_path}")
         else:
             print("Error: No image was generated in the response.", file=sys.stderr)
             sys.exit(1)

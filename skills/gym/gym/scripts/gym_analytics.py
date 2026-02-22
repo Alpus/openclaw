@@ -95,6 +95,11 @@ def load_sessions(history_dir):
 
 def normalize_match(name, target):
     nl, tl = name.lower(), target.lower()
+    # "Squat (lighter)" should NOT match plain "Squat" — they're separate exercises
+    if "lighter" in nl and "lighter" not in tl:
+        return False
+    if "lighter" in tl and "lighter" not in nl:
+        return False
     if nl == tl or tl in nl or nl in tl:
         return True
     aliases = {
